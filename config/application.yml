@@ -1,0 +1,63 @@
+db:
+  connector:
+    insert:
+      uri: dicom/instances
+  service:
+    url: http://10.201.8.58:8081/api/
+directorywatcher:
+  running:
+    status: true
+
+file:
+  server:
+    path: /opt/fileserver
+jcifs:
+  smb:
+    client:
+      maxVersion: SMB311
+      minVersion: SMB202
+max:
+  retries: 3
+remote:
+  kafka:
+    receiver:
+      topic: dcm-recv-topic
+    url: 10.201.8.56:9094
+    acks: all
+    retries: 3
+    batch-size: 16384
+    linger-ms: 1
+    buffer-memory: 33554432
+    enable-idempotence: true
+    compression-type: lz4
+server:
+  port: 8080
+
+sharedfolder:
+  password: 7;l2$3YH!O(N.Q1T1Btn
+  servername: 10.201.8.11
+  sharepath: Citius-Dev
+  username: Citius-SVC@nsdev.local
+  enableRemoteDirectoryWatcher: false
+
+spring:
+  application:
+    name: DicomReceiver
+  main:
+    banner-mode: log
+dicom:
+  barcode:
+    generation:
+      enable: true
+storescp:
+  aetitle: EH_ENRICH
+  aetitle.port: 2575
+  bind: -b
+  command: storescp
+  directory: --directory
+  storage:
+#    path: D:\NK-Work\shischou\SampleDICOMFile\dicom_files_from_box
+    path: /opt/received
+
+
+
