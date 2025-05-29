@@ -19,6 +19,11 @@ public class DicomSCPServer {
     private final Connection conn;
     private static final String VL_WHOLE_SLIDE_MICROSCOPY_IMAGE_STORAGE = "1.2.840.10008.5.1.4.1.1.77.1.6";
 
+    // Storage Commitment SOP Class UID (Push Model)
+    public static final String STORAGE_COMMITMENT_PUSH_MODEL_SOP_CLASS = "1.2.840.10008.1.20.1";
+    // Storage Commitment SOP Instance UID (always fixed)
+    public static final String STORAGE_COMMITMENT_PUSH_MODEL_SOP_INSTANCE = "1.2.840.10008.1.20.1.1";
+
 
     public DicomSCPServer(DicomSCPConfig config) throws IOException {
         device = new Device("dicom-scp");
@@ -56,6 +61,12 @@ public class DicomSCPServer {
                         UID.ImplicitVRLittleEndian,
                         UID.ExplicitVRLittleEndian,
                 }));
+
+        ae.addTransferCapability(new TransferCapability(null,
+                STORAGE_COMMITMENT_PUSH_MODEL_SOP_CLASS,
+                TransferCapability.Role.SCP,
+                UID.ImplicitVRLittleEndian));
+
 
 
         conn.setPort(config.getPort());
