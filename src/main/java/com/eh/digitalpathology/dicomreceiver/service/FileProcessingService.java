@@ -47,21 +47,27 @@ public class FileProcessingService {
                     dicomDirService.fetchAndStoreMetaData(filePath);
 
                 }else {
-                    DicomRequestDBObject dicomRequestDBObject = dicomExtractorService.extract(intermediateStore, filePath.toString());
-                    String status = databaseService.insertDicomData(dicomRequestDBObject, DICOM_RECEIVER);
-                    log.info("processFile :: response from insertDicomData(): {}", status);
-                    if ("success".equalsIgnoreCase(status)) {
-                        log.info("processFile :: Data insertion successful !!!");
-                        notifyKafka(dicomRequestDBObject);
-                    } else {
-                        log.info("processFile :: KAFKA NOT NOTIFIED!!!.. ");
-                    }
+                    extractFile(intermediateStore, filePath);
                 }
             } catch (Exception e) {
                 log.error("processFile :: Exception occurred while processing file: {}", e.getMessage());
             }
         }
     }
+
+    public DicomRequestDBObject extractFile(String intermediateStore, Path filePath) {
+        DicomRequestDBObject dicomRequestDBObject = dicomExtractorService.extract(intermediateStore, filePath.toString());
+        String status = databaseService.insertDicomData(dicomRequestDBObject, DICOM_RECEIVER);
+        log.info("processFile :: response from insertDicomData(): {}", status);
+        if ("success".equalsIgnoreCase(status)) {
+            log.info("processFile :: Data insertion successful !!!");
+            notifyKafka(dicomRequestDBObject);
+        } else {
+            log.info("processFile :: KAFKA NOT NOTIFIED!!!.. ");
+        }
+        return dicomRequestDBObject;
+    }
+
 
     public void notifyKafka(DicomRequestDBObject requestDBObject) {
         log.info("notifyKafka :: =======>Sending notification to KAFKA: {}", requestDBObject);

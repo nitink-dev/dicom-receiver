@@ -6,13 +6,15 @@ import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.TransferCapability;
 import org.dcm4che3.net.service.DicomServiceRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.concurrent.Executors;
 
-@Component
+@Service
 public class DicomSCPServer {
     private final Device device;
     private final ApplicationEntity ae;
@@ -24,10 +26,16 @@ public class DicomSCPServer {
     // Storage Commitment SOP Instance UID (always fixed)
     public static final String STORAGE_COMMITMENT_PUSH_MODEL_SOP_INSTANCE = "1.2.840.10008.1.20.1.1";
 
+    @Autowired
+    private final StorageCommitmentSCPService storageCommitmentSCPService;
+    @Autowired
+    private final DicomStoreSCPService dicomStoreSCPService;
 
-    public DicomSCPServer(DicomSCPConfig config) throws IOException {
+    public DicomSCPServer(StorageCommitmentSCPService storageCommitmentSCPService, DicomStoreSCPService dicomStoreSCPService) throws IOException {
+        this.storageCommitmentSCPService = storageCommitmentSCPService;
+        this.dicomStoreSCPService = dicomStoreSCPService;
         device = new Device("dicom-scp");
-        ae = new ApplicationEntity(config.getAETitle());
+        ae = new ApplicationEntity("EH_ENRICH");
         conn = new Connection();
 
 
@@ -39,8 +47,8 @@ public class DicomSCPServer {
         ae.addConnection(conn);
 
         DicomServiceRegistry serviceRegistry = new DicomServiceRegistry();
-        serviceRegistry.addDicomService(new DicomStoreSCPService());
-        serviceRegistry.addDicomService(new StorageCommitmentSCPService());
+        serviceRegistry.addDicomService(dicomStoreSCPService);
+        serviceRegistry.addDicomService(storageCommitmentSCPService);
         device.setDimseRQHandler(serviceRegistry);
 
         // Define SOP class support
@@ -69,7 +77,7 @@ public class DicomSCPServer {
 
 
 
-        conn.setPort(config.getPort());
+        conn.setPort(2576);
     }
 
     public void start() throws IOException, InterruptedException, GeneralSecurityException {

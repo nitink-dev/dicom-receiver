@@ -1,24 +1,21 @@
 package com.eh.digitalpathology.dicomreceiver.api;
 
+import com.eh.digitalpathology.dicomreceiver.api.db.*;
 import org.dcm4che3.data.*;
 import org.dcm4che3.io.DicomInputStream;
-import org.dcm4che3.io.DicomOutputStream;
 import org.dcm4che3.net.*;
-import org.dcm4che3.net.pdu.*;
+import org.dcm4che3.net.pdu.PresentationContext;
 import org.dcm4che3.net.service.DicomService;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Executors;
+import java.util.Date;
+import java.util.Optional;
 
 @Component
 class StorageCommitmentSCPService implements DicomService {
@@ -29,6 +26,18 @@ class StorageCommitmentSCPService implements DicomService {
     public static final String STORAGE_COMMITMENT_PUSH_MODEL_SOP_CLASS = "1.2.840.10008.1.20.1";
     // Storage Commitment SOP Instance UID (always fixed)
     public static final String STORAGE_COMMITMENT_PUSH_MODEL_SOP_INSTANCE = "1.2.840.10008.1.20.1.1";
+
+    private final DicomInstanceRepository dicomInstanceRepository;
+
+    private final StorageCommitmentTrackerRepository storageCommitmentTrackerRepository;
+
+    private final StorageCommitmentMappingRepository storageCommitmentMappingRepository;
+
+    StorageCommitmentSCPService(DicomInstanceRepository dicomInstanceRepository, StorageCommitmentTrackerRepository storageCommitmentTrackerRepository, StorageCommitmentMappingRepository storageCommitmentMappingRepository) {
+        this.dicomInstanceRepository = dicomInstanceRepository;
+        this.storageCommitmentTrackerRepository = storageCommitmentTrackerRepository;
+        this.storageCommitmentMappingRepository = storageCommitmentMappingRepository;
+    }
 
 
     @Override
@@ -54,15 +63,22 @@ class StorageCommitmentSCPService implements DicomService {
         eventInfo.setString(Tag.TransactionUID, VR.UI, transactionUID);
         Sequence successSeq = eventInfo.newSequence(Tag.ReferencedSOPSequence, refSOPSeq.size());
         Sequence failedSeq = eventInfo.newSequence(Tag.FailedSOPSequence, refSOPSeq.size());
-
+        String seriesId = null;
         for (Attributes item : refSOPSeq) {
+            // update database for commitment request status
+            //DicomFileTracker.saveRecords(successSeq, record);
             String sopClassUID = item.getString(Tag.ReferencedSOPClassUID);
             String sopInstanceUID = item.getString(Tag.ReferencedSOPInstanceUID);
             if (sopClassUID == null || sopInstanceUID == null) {
                 System.out.println("Missing SOP Class UID or Instance UID in a referenced item");
                 continue;
             }
-            if (checkIfStored(sopClassUID, sopInstanceUID)) {
+//            if (checkIfStored(sopClassUID, sopInstanceUID)) {
+            // get record from database for sopInstanceUID
+            Optional<DicomInstance> record = dicomInstanceRepository.findBySopInstanceUid(sopInstanceUID);
+
+            if (record.isPresent()) {
+                seriesId = seriesId == null ? record.get().getSeriesInstanceUid(): seriesId;
                 Attributes successItem = new Attributes();
                 successItem.setString(Tag.ReferencedSOPClassUID, VR.UI, sopClassUID);
                 successItem.setString(Tag.ReferencedSOPInstanceUID, VR.UI, sopInstanceUID);
@@ -74,13 +90,16 @@ class StorageCommitmentSCPService implements DicomService {
                 failedItem.setInt(Tag.FailureReason, VR.US, 0x0110); // Processing failure
                 failedSeq.add(failedItem);
             }
+
+            // update database for commitment request status
+            if(seriesId != null)
+                saveStorageCommitmentTracker(seriesId, sopInstanceUID, record.isPresent());
         }
         int eventTypeID = failedSeq.isEmpty() ? 1 : 2;
         System.out.printf("Sending N-EVENT-REPORT (eventTypeID = %d): %d success, %d failed%n",
                 eventTypeID, successSeq.size(), failedSeq.size());
 
-        // sending data to database
-        DicomFileTracker.saveRecords(successSeq);
+
 
         try {
             as.neventReport(
@@ -96,6 +115,10 @@ class StorageCommitmentSCPService implements DicomService {
         }
         Attributes rsp = Commands.mkNActionRSP(cmd, Status.Success);
         as.writeDimseRSP(pc, rsp, null);
+        // update series for commitment response flag in database
+        if (seriesId != null) {
+            saveStorageCommitmentMapping(seriesId, failedSeq.isEmpty());
+        }
     }
     @Override
     public void onClose(Association association) {
@@ -129,5 +152,26 @@ class StorageCommitmentSCPService implements DicomService {
         }
     }
 
+    private void saveStorageCommitmentTracker(String seriesId, String sopInstanceUID, boolean present) {
+        StorageCommitmentTracker tracker = new StorageCommitmentTracker();
+        tracker.setSopInstanceUid(sopInstanceUID);
+        tracker.setSeriesInstanceUid(seriesId);
+        tracker.setCmtRequestStatus("REQUESTED");
 
+        if (present) {
+            tracker.setCmtResponseStatus("SUCCESS");
+        } else {
+            tracker.setCmtResponseStatus("FAILURE");
+        }
+        tracker.setTimestamp(new Date());
+        storageCommitmentTrackerRepository.save(tracker);
+    }
+
+    private void saveStorageCommitmentMapping(String seriesId, boolean cmtStatus) {
+        StorageCommitmentMapping mapping = new StorageCommitmentMapping();
+        mapping.setSeriesInstanceUid(seriesId);
+        mapping.setStorageCmtStatus(cmtStatus);
+        mapping.setUpdatedAt(new Date());
+        storageCommitmentMappingRepository.save(mapping);
+    }
 }

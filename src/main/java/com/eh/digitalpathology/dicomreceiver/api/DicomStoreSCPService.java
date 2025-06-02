@@ -1,5 +1,6 @@
 package com.eh.digitalpathology.dicomreceiver.api;
 
+import com.eh.digitalpathology.dicomreceiver.service.FileProcessingService;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.io.DicomInputStream;
@@ -20,6 +21,7 @@ import java.nio.file.Paths;
 public class DicomStoreSCPService extends BasicCStoreSCP {
 
     private final Path storageDir = Paths.get("/opt/dicom/storage");
+
 
     public DicomStoreSCPService() {
         super("*");
@@ -43,6 +45,7 @@ public class DicomStoreSCPService extends BasicCStoreSCP {
             dos.writeDataset(dataset.createFileMetaInformation(pc.getTransferSyntax()), dataset);
         }
 
+        // calling extractor service to store file data
         DicomFileTracker.record(sopInstanceUID);
     }
 }
